@@ -11,6 +11,7 @@ import javax.enterprise.inject.spi.Unmanaged;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 
@@ -18,17 +19,34 @@ import java.util.Set;
 public final class Cdi2Factory implements ObjectFactory {
 
     private final Map<Class<?>, Unmanaged.UnmanagedInstance<?>> standaloneInstances = new HashMap<>();
-    private final Set<Class<?>> unmanagedclasses = new HashSet<>();
-    private final Set<Class<?>> managedClasses = new HashSet<>();
+    private final Set<Class<?>> classes = new HashSet<>();
     private SeContainer container;
+    private boolean validated;
 
     @Override
     public void start() {
         if (container == null) {
             SeContainerInitializer initializer = SeContainerInitializer.newInstance();
-            initializer.addBeanClasses(unmanagedclasses.toArray(new Class[unmanagedclasses.size()]));
+            initializer.addBeanClasses(classes.toArray(new Class[classes.size()]));
             container = initializer.initialize();
+            validateContainer();
         }
+    }
+
+    private void validateContainer() {
+        if (!validated && container.isAmbiguous()) {
+            for (Iterator<Class<?>> iter = classes.iterator(); iter.hasNext();) {
+                Class<?> clazz = iter.next();
+                Instance<?> selected = container.select(clazz);
+                if (selected.isAmbiguous()) {
+                    iter.remove();
+                }
+            }
+            validated = true;
+            stop();
+            start();
+        }
+        validated = true;
     }
 
     @Override
@@ -46,16 +64,7 @@ public final class Cdi2Factory implements ObjectFactory {
 
     @Override
     public boolean addClass(final Class<?> clazz) {
-    	if (!managedClasses.contains(clazz) && !unmanagedclasses.contains(clazz)) {
-    		start();
-    		Instance<?> selected = container.select(clazz);
-    		if (selected.isUnsatisfied()) {
-    			unmanagedclasses.add(clazz);
-    		} else {
-    			managedClasses.add(clazz);
-    		}
-    		stop();
-    	}
+        classes.add(clazz);
         return true;
     }
 
