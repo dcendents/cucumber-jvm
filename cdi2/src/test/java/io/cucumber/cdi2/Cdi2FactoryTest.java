@@ -2,7 +2,10 @@ package io.cucumber.cdi2;
 
 import io.cucumber.core.backend.ObjectFactory;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import javax.enterprise.context.ApplicationScoped;
 import javax.enterprise.inject.Vetoed;
@@ -16,13 +19,24 @@ import static org.hamcrest.core.IsNull.notNullValue;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
+import java.io.IOException;
+import java.net.URL;
+import java.util.Enumeration;
+
 class Cdi2FactoryTest {
 
     final ObjectFactory factory = new Cdi2Factory();
+    ClassLoader threadClassLoader;
+    
+    @BeforeEach
+    void init() {
+        threadClassLoader = Thread.currentThread().getContextClassLoader();
+    }
 
     @AfterEach
     void stop() {
         factory.stop();
+        Thread.currentThread().setContextClassLoader(threadClassLoader);
     }
 
     @Test
@@ -100,14 +114,39 @@ class Cdi2FactoryTest {
 
     }
 
-    @Test
-    void shouldInjectStepDefinitions() {
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void shouldInjectStepDefinitions(boolean withBeansXml) {
+        setClassLoader(withBeansXml);
         factory.addClass(OtherStepDefinitions.class);
         factory.addClass(StepDefinitions.class);
         factory.start();
         StepDefinitions stepDefinitions = factory.getInstance(StepDefinitions.class);
         assertThat(stepDefinitions.injected, is(notNullValue()));
         factory.stop();
+    }
+
+    static class IgnoreBeansXmlClassLoader extends ClassLoader {
+        public IgnoreBeansXmlClassLoader(ClassLoader parent) {
+            super(parent);
+        }
+        @Override
+        public Enumeration<URL> getResources(String name) throws IOException {
+            if (Cdi2Factory.BEANS_XML_FILE.equals(name) ) {
+                Enumeration<URL> enumeration = super.getResources(name);
+                if (enumeration.hasMoreElements()) {
+                    enumeration.nextElement();
+                }
+                return enumeration;
+            }
+            return super.getResources(name);
+        }
+    }
+    
+    void setClassLoader(boolean withBeansXml) {
+        if (!withBeansXml) {
+            Thread.currentThread().setContextClassLoader(new IgnoreBeansXmlClassLoader(threadClassLoader));
+        }
     }
 
 }

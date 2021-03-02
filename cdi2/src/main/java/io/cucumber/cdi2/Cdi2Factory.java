@@ -23,7 +23,7 @@ import java.util.Set;
 @API(status = API.Status.STABLE)
 public final class Cdi2Factory implements ObjectFactory {
 
-    private static final String BEANS_XML_FILE = "META-INF/beans.xml";
+    static final String BEANS_XML_FILE = "META-INF/beans.xml";
 
     private final Map<Class<?>, Unmanaged.UnmanagedInstance<?>> standaloneInstances = new HashMap<>();
     private final Set<Class<?>> classes = new HashSet<>();
@@ -65,7 +65,7 @@ public final class Cdi2Factory implements ObjectFactory {
         if (managedBeanLocations == null) {
             managedBeanLocations = new HashSet<>();
             try {
-                for (Enumeration<URL> beans = this.getClass().getClassLoader().getResources(BEANS_XML_FILE); beans
+                for (Enumeration<URL> beans = Thread.currentThread().getContextClassLoader().getResources(BEANS_XML_FILE); beans
                         .hasMoreElements();) {
                     URL url = beans.nextElement();
                     URLConnection connection = url.openConnection();
