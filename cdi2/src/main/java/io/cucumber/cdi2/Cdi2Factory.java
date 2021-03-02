@@ -9,19 +9,26 @@ import javax.enterprise.inject.se.SeContainerInitializer;
 import javax.enterprise.inject.spi.BeanManager;
 import javax.enterprise.inject.spi.Unmanaged;
 
+import java.io.File;
+import java.io.IOException;
+import java.net.JarURLConnection;
+import java.net.URL;
+import java.net.URLConnection;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 
 @API(status = API.Status.STABLE)
 public final class Cdi2Factory implements ObjectFactory {
 
+    private static final String BEANS_XML_FILE = "META-INF/beans.xml";
+
     private final Map<Class<?>, Unmanaged.UnmanagedInstance<?>> standaloneInstances = new HashMap<>();
     private final Set<Class<?>> classes = new HashSet<>();
+    private Set<File> managedBeanLocations;
     private SeContainer container;
-    private boolean validated;
 
     @Override
     public void start() {
@@ -29,24 +36,7 @@ public final class Cdi2Factory implements ObjectFactory {
             SeContainerInitializer initializer = SeContainerInitializer.newInstance();
             initializer.addBeanClasses(classes.toArray(new Class[classes.size()]));
             container = initializer.initialize();
-            validateContainer();
         }
-    }
-
-    private void validateContainer() {
-        if (!validated && container.isAmbiguous()) {
-            for (Iterator<Class<?>> iter = classes.iterator(); iter.hasNext();) {
-                Class<?> clazz = iter.next();
-                Instance<?> selected = container.select(clazz);
-                if (selected.isAmbiguous()) {
-                    iter.remove();
-                }
-            }
-            validated = true;
-            stop();
-            start();
-        }
-        validated = true;
     }
 
     @Override
@@ -64,8 +54,30 @@ public final class Cdi2Factory implements ObjectFactory {
 
     @Override
     public boolean addClass(final Class<?> clazz) {
-        classes.add(clazz);
+        File classLocation = new File(clazz.getProtectionDomain().getCodeSource().getLocation().getPath());
+        if (!getManagedBeanLocations().contains(classLocation)) {
+            classes.add(clazz);
+        }
         return true;
+    }
+
+    private Set<File> getManagedBeanLocations() {
+        if (managedBeanLocations == null) {
+            managedBeanLocations = new HashSet<>();
+            try {
+                for (Enumeration<URL> beans = this.getClass().getClassLoader().getResources(BEANS_XML_FILE); beans
+                        .hasMoreElements();) {
+                    URL url = beans.nextElement();
+                    URLConnection connection = url.openConnection();
+                    File location = connection instanceof JarURLConnection
+                            ? location = new File(((JarURLConnection) connection).getJarFileURL().getPath())
+                            : new File(url.getPath()).getParentFile().getParentFile();
+                    managedBeanLocations.add(location);
+                }
+            } catch (IOException e) {
+            }
+        }
+        return managedBeanLocations;
     }
 
     @Override
